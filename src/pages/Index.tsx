@@ -1,14 +1,646 @@
-// Update this page (the content is just a fallback if you fail to update the page)
+import { useState } from "react";
+import Icon from "@/components/ui/icon";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Separator } from "@/components/ui/separator";
+import { Switch } from "@/components/ui/switch";
 
-const Index = () => {
+type Page = "home" | "generate" | "subscription" | "profile" | "admin";
+
+const NAV_ITEMS: { id: Page; label: string; icon: string }[] = [
+  { id: "home", label: "Главная", icon: "LayoutDashboard" },
+  { id: "generate", label: "Генерация", icon: "Sparkles" },
+  { id: "subscription", label: "Подписка", icon: "CreditCard" },
+  { id: "profile", label: "Профиль", icon: "User" },
+  { id: "admin", label: "Админ-панель", icon: "ShieldCheck" },
+];
+
+const PLANS = [
+  {
+    id: "starter",
+    name: "Старт",
+    price: "990",
+    color: "text-muted-foreground",
+    accent: "bg-muted/60",
+    border: "border-border",
+    daily: 10,
+    monthly: 100,
+    features: ["10 генераций / день", "100 в месяц", "SD качество", "Базовые стили"],
+  },
+  {
+    id: "pro",
+    name: "Про",
+    price: "2 490",
+    color: "text-primary",
+    accent: "bg-primary/10",
+    border: "border-primary/40",
+    daily: 50,
+    monthly: 1000,
+    popular: true,
+    features: ["50 генераций / день", "1 000 в месяц", "HD качество", "Все стили", "Приоритет"],
+  },
+  {
+    id: "business",
+    name: "Бизнес",
+    price: "7 490",
+    color: "text-warning",
+    accent: "bg-warning/10",
+    border: "border-warning/30",
+    daily: 200,
+    monthly: 5000,
+    features: ["200 генераций / день", "5 000 в месяц", "4K качество", "API доступ", "SLA 99.9%"],
+  },
+];
+
+const USERS_DATA = [
+  { id: 1, name: "Иванов А.П.", email: "ivanov@corp.ru", plan: "Про", daily: 34, dailyMax: 50, monthly: 456, monthlyMax: 1000, status: "active" },
+  { id: 2, name: "Смирнова Е.В.", email: "smirnova@corp.ru", plan: "Старт", daily: 10, dailyMax: 10, monthly: 98, monthlyMax: 100, status: "limit" },
+  { id: 3, name: "Козлов И.М.", email: "kozlov@corp.ru", plan: "Бизнес", daily: 12, dailyMax: 200, monthly: 201, monthlyMax: 5000, status: "active" },
+  { id: 4, name: "Петрова О.Д.", email: "petrova@corp.ru", plan: "Про", daily: 0, dailyMax: 50, monthly: 12, monthlyMax: 1000, status: "inactive" },
+];
+
+const HISTORY = [
+  { id: 1, prompt: "Корпоративный логотип в минималистичном стиле", style: "Минимализм", time: "14:32", status: "done" },
+  { id: 2, prompt: "Иллюстрация для презентации — командная работа", style: "Деловой", time: "13:18", status: "done" },
+  { id: 3, prompt: "Баннер для конференции по цифровым технологиям", style: "Техно", time: "11:05", status: "done" },
+  { id: 4, prompt: "Аватар для корпоративного профиля сотрудника", style: "Портрет", time: "09:44", status: "error" },
+];
+
+export default function Index() {
+  const [page, setPage] = useState<Page>("home");
+  const [prompt, setPrompt] = useState("");
+  const [style, setStyle] = useState("minimal");
+  const [quality, setQuality] = useState("hd");
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+
+  const dailyUsed = 34;
+  const dailyMax = 50;
+  const monthlyUsed = 456;
+  const monthlyMax = 1000;
+
+  const handleGenerate = () => {
+    if (!prompt.trim()) return;
+    setIsGenerating(true);
+    setTimeout(() => setIsGenerating(false), 3000);
+  };
+
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100">
-      <div className="text-center">
-        <h1 className="text-4xl font-bold mb-4 color-black text-black">Добро пожаловать!</h1>
-        <p className="text-xl text-gray-600">тут будет отображаться ваш проект</p>
-      </div>
+    <div className="flex h-screen bg-background overflow-hidden font-ibm">
+      {/* Sidebar */}
+      <aside className={`${sidebarOpen ? "w-60" : "w-16"} transition-all duration-200 flex flex-col border-r border-border bg-sidebar shrink-0`}>
+        {/* Logo */}
+        <div className="flex items-center gap-3 px-4 h-14 border-b border-border shrink-0">
+          <div className="w-7 h-7 rounded bg-primary flex items-center justify-center shrink-0">
+            <Icon name="Zap" size={14} className="text-primary-foreground" />
+          </div>
+          {sidebarOpen && (
+            <span className="font-semibold text-sm tracking-wide text-foreground">ImageGen Pro</span>
+          )}
+        </div>
+
+        {/* Nav */}
+        <nav className="flex-1 p-2 space-y-0.5 overflow-y-auto">
+          {NAV_ITEMS.map((item) => (
+            <button
+              key={item.id}
+              onClick={() => setPage(item.id)}
+              className={`nav-link w-full ${page === item.id ? "active" : ""}`}
+            >
+              <Icon name={item.icon} size={17} className="shrink-0" />
+              {sidebarOpen && <span className="truncate">{item.label}</span>}
+            </button>
+          ))}
+        </nav>
+
+        {/* User */}
+        <div className="p-2 border-t border-border shrink-0">
+          {sidebarOpen ? (
+            <div className="flex items-center gap-3 px-3 py-2.5 rounded-md bg-secondary/50">
+              <div className="w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center shrink-0">
+                <span className="text-xs font-semibold text-primary">ИА</span>
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-medium text-foreground truncate">Иванов А.П.</p>
+                <p className="text-xs text-muted-foreground truncate">Тариф: Про</p>
+              </div>
+            </div>
+          ) : (
+            <div className="flex justify-center py-2">
+              <div className="w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center">
+                <span className="text-xs font-semibold text-primary">ИА</span>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Toggle */}
+        <button
+          onClick={() => setSidebarOpen(!sidebarOpen)}
+          className="flex items-center justify-center h-9 border-t border-border text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <Icon name={sidebarOpen ? "PanelLeftClose" : "PanelLeftOpen"} size={15} />
+        </button>
+      </aside>
+
+      {/* Main */}
+      <main className="flex-1 flex flex-col overflow-hidden">
+        {/* Topbar */}
+        <header className="h-14 border-b border-border flex items-center justify-between px-6 shrink-0 bg-card/50">
+          <div>
+            <h1 className="text-sm font-semibold text-foreground">
+              {NAV_ITEMS.find(n => n.id === page)?.label}
+            </h1>
+            <p className="text-xs text-muted-foreground">
+              {page === "home" && "Сводка активности и статистика"}
+              {page === "generate" && "Создание изображений по описанию"}
+              {page === "subscription" && "Тарифные планы и управление подпиской"}
+              {page === "profile" && "Настройки аккаунта"}
+              {page === "admin" && "Управление пользователями и лимитами"}
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-secondary text-xs text-muted-foreground">
+              <div className="w-1.5 h-1.5 rounded-full bg-success animate-pulse-dot" />
+              Система работает
+            </div>
+            <Button variant="ghost" size="icon" className="h-8 w-8">
+              <Icon name="Bell" size={16} />
+            </Button>
+          </div>
+        </header>
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto p-6">
+
+          {/* HOME */}
+          {page === "home" && (
+            <div className="space-y-6 animate-fade-in">
+              <div className="grid grid-cols-4 gap-4">
+                {[
+                  { label: "Генераций сегодня", value: "34", max: "50", icon: "Sparkles", trend: "+12%" },
+                  { label: "В этом месяце", value: "456", max: "1 000", icon: "BarChart2", trend: "+8%" },
+                  { label: "Активных пользователей", value: "127", icon: "Users", trend: "+3%" },
+                  { label: "Доступно генераций", value: "16", icon: "Layers", trend: null },
+                ].map((s, i) => (
+                  <div key={i} className="stat-card">
+                    <div className="flex items-start justify-between mb-3">
+                      <p className="text-xs text-muted-foreground font-medium">{s.label}</p>
+                      <div className="w-7 h-7 rounded-md bg-primary/10 flex items-center justify-center">
+                        <Icon name={s.icon} size={14} className="text-primary" />
+                      </div>
+                    </div>
+                    <p className="text-2xl font-semibold text-foreground">{s.value}
+                      {s.max && <span className="text-sm text-muted-foreground font-normal"> / {s.max}</span>}
+                    </p>
+                    {s.trend && (
+                      <p className="text-xs text-success mt-1">{s.trend} к прошлому периоду</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              <div className="grid grid-cols-3 gap-4">
+                <div className="col-span-1 bg-card border border-border rounded-lg p-5 space-y-5">
+                  <h3 className="text-sm font-semibold text-foreground">Использование лимитов</h3>
+                  <div className="space-y-4">
+                    <div>
+                      <div className="flex justify-between text-xs mb-2">
+                        <span className="text-muted-foreground">Дневной лимит</span>
+                        <span className="font-mono text-foreground">{dailyUsed} / {dailyMax}</span>
+                      </div>
+                      <Progress value={(dailyUsed / dailyMax) * 100} className="h-1.5" />
+                      <p className="text-xs text-muted-foreground mt-1">Обновится в 00:00</p>
+                    </div>
+                    <Separator />
+                    <div>
+                      <div className="flex justify-between text-xs mb-2">
+                        <span className="text-muted-foreground">Месячный лимит</span>
+                        <span className="font-mono text-foreground">{monthlyUsed} / {monthlyMax}</span>
+                      </div>
+                      <Progress value={(monthlyUsed / monthlyMax) * 100} className="h-1.5" />
+                      <p className="text-xs text-muted-foreground mt-1">Обновится 1 июня</p>
+                    </div>
+                  </div>
+                  <div className="pt-1">
+                    <Badge className="bg-primary/10 text-primary border-0 text-xs font-medium">Тариф: Про</Badge>
+                  </div>
+                </div>
+
+                <div className="col-span-2 bg-card border border-border rounded-lg p-5">
+                  <h3 className="text-sm font-semibold text-foreground mb-4">Последние генерации</h3>
+                  <div className="space-y-2">
+                    {HISTORY.map((h) => (
+                      <div key={h.id} className="flex items-center gap-3 p-3 rounded-md bg-secondary/40 hover:bg-secondary/70 transition-colors">
+                        <div className={`w-2 h-2 rounded-full shrink-0 ${h.status === "done" ? "bg-success" : "bg-destructive"}`} />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs text-foreground truncate">{h.prompt}</p>
+                          <p className="text-xs text-muted-foreground mt-0.5">{h.style}</p>
+                        </div>
+                        <span className="text-xs font-mono text-muted-foreground shrink-0">{h.time}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* GENERATE */}
+          {page === "generate" && (
+            <div className="max-w-3xl space-y-5 animate-fade-in">
+              <div className="flex items-center gap-6 p-4 bg-card border border-border rounded-lg">
+                <div className="flex-1">
+                  <div className="flex justify-between text-xs mb-1.5">
+                    <span className="text-muted-foreground">Дневной лимит</span>
+                    <span className="font-mono text-foreground">{dailyUsed} / {dailyMax}</span>
+                  </div>
+                  <Progress value={(dailyUsed / dailyMax) * 100} className="h-1" />
+                </div>
+                <div className="flex-1">
+                  <div className="flex justify-between text-xs mb-1.5">
+                    <span className="text-muted-foreground">Месячный лимит</span>
+                    <span className="font-mono text-foreground">{monthlyUsed} / {monthlyMax}</span>
+                  </div>
+                  <Progress value={(monthlyUsed / monthlyMax) * 100} className="h-1" />
+                </div>
+                <Badge className="bg-primary/10 text-primary border-0 shrink-0">Про</Badge>
+              </div>
+
+              <div className="bg-card border border-border rounded-lg p-5 space-y-4">
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2 block">Описание изображения</label>
+                  <Textarea
+                    value={prompt}
+                    onChange={(e) => setPrompt(e.target.value)}
+                    placeholder="Опишите изображение, которое нужно создать..."
+                    className="resize-none h-28 text-sm bg-secondary/50 border-border focus:border-primary/50 transition-colors"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1.5">{prompt.length} / 500 символов</p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2 block">Стиль</label>
+                    <Select value={style} onValueChange={setStyle}>
+                      <SelectTrigger className="bg-secondary/50 border-border text-sm h-9">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="minimal">Минимализм</SelectItem>
+                        <SelectItem value="business">Деловой</SelectItem>
+                        <SelectItem value="tech">Техно</SelectItem>
+                        <SelectItem value="portrait">Портрет</SelectItem>
+                        <SelectItem value="abstract">Абстракция</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2 block">Качество</label>
+                    <Select value={quality} onValueChange={setQuality}>
+                      <SelectTrigger className="bg-secondary/50 border-border text-sm h-9">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="sd">SD — Стандарт</SelectItem>
+                        <SelectItem value="hd">HD — Высокое</SelectItem>
+                        <SelectItem value="4k">4K — Максимум</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <Button
+                  onClick={handleGenerate}
+                  disabled={!prompt.trim() || isGenerating}
+                  className="w-full h-10 bg-primary text-primary-foreground hover:bg-primary/90 font-semibold text-sm"
+                >
+                  {isGenerating ? (
+                    <span className="flex items-center gap-2">
+                      <Icon name="Loader2" size={16} className="animate-spin" />
+                      Генерация...
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-2">
+                      <Icon name="Sparkles" size={16} />
+                      Создать изображение
+                    </span>
+                  )}
+                </Button>
+              </div>
+
+              <div className="bg-card border border-border rounded-lg p-5">
+                <h3 className="text-sm font-semibold text-foreground mb-4">История генераций</h3>
+                <div className="space-y-2">
+                  {HISTORY.map((h) => (
+                    <div key={h.id} className="flex items-center gap-3 p-3 rounded-md border border-border/50 hover:border-border transition-colors">
+                      <div className={`w-8 h-8 rounded-md flex items-center justify-center shrink-0 ${h.status === "done" ? "bg-success/10" : "bg-destructive/10"}`}>
+                        <Icon name={h.status === "done" ? "CheckCircle" : "XCircle"} size={15} className={h.status === "done" ? "text-success" : "text-destructive"} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs text-foreground truncate">{h.prompt}</p>
+                        <p className="text-xs text-muted-foreground">{h.style} • {h.time}</p>
+                      </div>
+                      <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0">
+                        <Icon name="Download" size={13} />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* SUBSCRIPTION */}
+          {page === "subscription" && (
+            <div className="max-w-4xl space-y-6 animate-fade-in">
+              <div className="grid grid-cols-3 gap-4">
+                {PLANS.map((plan) => (
+                  <div key={plan.id} className={`relative bg-card border ${plan.border} rounded-lg p-5 flex flex-col gap-4`}>
+                    {plan.popular && (
+                      <div className="absolute -top-px left-1/2 -translate-x-1/2">
+                        <Badge className="bg-primary text-primary-foreground border-0 rounded-t-none rounded-b-md text-xs px-3">Популярный</Badge>
+                      </div>
+                    )}
+                    <div>
+                      <div className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-mono font-medium mb-3 ${plan.accent} ${plan.color}`}>{plan.name}</div>
+                      <div className="flex items-baseline gap-1">
+                        <span className="text-2xl font-semibold text-foreground">{plan.price}</span>
+                        <span className="text-xs text-muted-foreground">₽/мес</span>
+                      </div>
+                    </div>
+
+                    <Separator />
+
+                    <div className="space-y-2">
+                      <div>
+                        <div className="flex justify-between text-xs mb-1">
+                          <span className="text-muted-foreground">В день</span>
+                          <span className={`font-mono font-medium ${plan.color}`}>{plan.daily}</span>
+                        </div>
+                        <div className="h-1 bg-secondary rounded-full" />
+                      </div>
+                      <div>
+                        <div className="flex justify-between text-xs mb-1">
+                          <span className="text-muted-foreground">В месяц</span>
+                          <span className={`font-mono font-medium ${plan.color}`}>{plan.monthly.toLocaleString("ru")}</span>
+                        </div>
+                        <div className="h-1 bg-secondary rounded-full" />
+                      </div>
+                    </div>
+
+                    <ul className="space-y-1.5 flex-1">
+                      {plan.features.map((f, i) => (
+                        <li key={i} className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <Icon name="Check" size={12} className={plan.color} />
+                          {f}
+                        </li>
+                      ))}
+                    </ul>
+
+                    <Button
+                      className={`h-9 text-sm font-medium ${plan.id === "pro" ? "bg-primary text-primary-foreground hover:bg-primary/90" : "bg-secondary text-foreground hover:bg-secondary/80"}`}
+                      variant={plan.id === "pro" ? "default" : "secondary"}
+                    >
+                      {plan.id === "pro" ? "Текущий план" : "Выбрать"}
+                    </Button>
+                  </div>
+                ))}
+              </div>
+
+              <div className="bg-card border border-border rounded-lg p-5">
+                <h3 className="text-sm font-semibold text-foreground mb-4">Ваша подписка</h3>
+                <div className="grid grid-cols-4 gap-4">
+                  {[
+                    { label: "Тариф", value: "Про", mono: false },
+                    { label: "Следующее списание", value: "01.06.2026", mono: true },
+                    { label: "Сумма", value: "2 490 ₽", mono: true },
+                    { label: "Статус", value: "Активна", ok: true },
+                  ].map((item, i) => (
+                    <div key={i}>
+                      <p className="text-xs text-muted-foreground mb-1">{item.label}</p>
+                      <p className={`text-sm font-medium ${item.mono ? "font-mono" : ""} ${item.ok ? "text-success" : "text-foreground"}`}>{item.value}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* PROFILE */}
+          {page === "profile" && (
+            <div className="max-w-2xl space-y-5 animate-fade-in">
+              <div className="bg-card border border-border rounded-lg p-5 flex items-center gap-5">
+                <div className="w-16 h-16 rounded-full bg-primary/15 flex items-center justify-center text-2xl font-semibold text-primary shrink-0">
+                  ИА
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-sm font-semibold text-foreground">Иванов Алексей Петрович</h3>
+                  <p className="text-xs text-muted-foreground mt-0.5">ivanov@corp.ru</p>
+                  <Badge className="mt-2 bg-primary/10 text-primary border-0 text-xs">Тариф: Про</Badge>
+                </div>
+                <Button variant="outline" size="sm" className="shrink-0 text-xs border-border">
+                  <Icon name="Pencil" size={13} className="mr-1.5" />
+                  Редактировать
+                </Button>
+              </div>
+
+              <div className="bg-card border border-border rounded-lg p-5 space-y-4">
+                <h3 className="text-sm font-semibold text-foreground">Личные данные</h3>
+                {[
+                  { label: "Имя", value: "Алексей Петрович" },
+                  { label: "Email", value: "ivanov@corp.ru" },
+                  { label: "Организация", value: "ООО «Технологии»" },
+                  { label: "Роль", value: "Руководитель отдела" },
+                ].map((field, i) => (
+                  <div key={i} className="flex items-center justify-between py-2 border-b border-border/50 last:border-0">
+                    <span className="text-xs text-muted-foreground w-32">{field.label}</span>
+                    <span className="text-sm text-foreground flex-1 text-right">{field.value}</span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="bg-card border border-border rounded-lg p-5 space-y-4">
+                <h3 className="text-sm font-semibold text-foreground">Настройки</h3>
+                {[
+                  { label: "Email-уведомления при достижении лимита", desc: "Получать оповещения при 80% и 100% использования", def: true },
+                  { label: "Двухфакторная аутентификация", desc: "Дополнительный уровень безопасности аккаунта", def: false },
+                  { label: "Сохранять историю генераций", desc: "Хранить все созданные изображения 90 дней", def: true },
+                ].map((s, i) => (
+                  <div key={i} className="flex items-start justify-between gap-4">
+                    <div>
+                      <p className="text-xs font-medium text-foreground">{s.label}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">{s.desc}</p>
+                    </div>
+                    <Switch defaultChecked={s.def} />
+                  </div>
+                ))}
+              </div>
+
+              <Button variant="outline" className="text-xs border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive">
+                <Icon name="LogOut" size={13} className="mr-1.5" />
+                Выйти из аккаунта
+              </Button>
+            </div>
+          )}
+
+          {/* ADMIN */}
+          {page === "admin" && (
+            <div className="space-y-5 animate-fade-in">
+              <div className="grid grid-cols-4 gap-4">
+                {[
+                  { label: "Всего пользователей", value: "127", icon: "Users", warn: false },
+                  { label: "Достигли лимита", value: "8", icon: "AlertTriangle", warn: true },
+                  { label: "Генераций сегодня", value: "2 341", icon: "Sparkles", warn: false },
+                  { label: "Выручка в месяц", value: "184 500 ₽", icon: "TrendingUp", warn: false },
+                ].map((s, i) => (
+                  <div key={i} className="stat-card">
+                    <div className="flex items-start justify-between mb-3">
+                      <p className="text-xs text-muted-foreground font-medium">{s.label}</p>
+                      <div className={`w-7 h-7 rounded-md flex items-center justify-center ${s.warn ? "bg-warning/10" : "bg-primary/10"}`}>
+                        <Icon name={s.icon} size={14} className={s.warn ? "text-warning" : "text-primary"} />
+                      </div>
+                    </div>
+                    <p className={`text-2xl font-semibold ${s.warn ? "text-warning" : "text-foreground"}`}>{s.value}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="bg-card border border-border rounded-lg overflow-hidden">
+                <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+                  <h3 className="text-sm font-semibold text-foreground">Пользователи</h3>
+                  <div className="flex items-center gap-2">
+                    <Button variant="outline" size="sm" className="h-7 text-xs border-border">
+                      <Icon name="Filter" size={12} className="mr-1.5" />
+                      Фильтр
+                    </Button>
+                    <Button size="sm" className="h-7 text-xs bg-primary text-primary-foreground hover:bg-primary/90">
+                      <Icon name="UserPlus" size={12} className="mr-1.5" />
+                      Добавить
+                    </Button>
+                  </div>
+                </div>
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border bg-secondary/30">
+                      <th className="text-left py-3 px-5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Пользователь</th>
+                      <th className="text-left py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Тариф</th>
+                      <th className="text-left py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider">День</th>
+                      <th className="text-left py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Месяц</th>
+                      <th className="text-left py-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Статус</th>
+                      <th className="py-3 px-4" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {USERS_DATA.map((u, i) => (
+                      <tr key={u.id} className={`border-b border-border/50 hover:bg-secondary/20 transition-colors ${i === USERS_DATA.length - 1 ? "border-0" : ""}`}>
+                        <td className="py-3.5 px-5">
+                          <div className="flex items-center gap-3">
+                            <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center text-xs font-semibold text-primary shrink-0">
+                              {u.name.slice(0, 2)}
+                            </div>
+                            <div>
+                              <p className="text-xs font-medium text-foreground">{u.name}</p>
+                              <p className="text-xs text-muted-foreground">{u.email}</p>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <span className="tag bg-secondary text-muted-foreground">{u.plan}</span>
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <div className="w-28">
+                            <div className="flex justify-between text-xs mb-1">
+                              <span className="font-mono text-foreground">{u.daily}/{u.dailyMax}</span>
+                              <span className={`${u.daily >= u.dailyMax ? "text-destructive" : "text-muted-foreground"}`}>
+                                {Math.round((u.daily / u.dailyMax) * 100)}%
+                              </span>
+                            </div>
+                            <Progress value={(u.daily / u.dailyMax) * 100} className="h-1" />
+                          </div>
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <div className="w-28">
+                            <div className="flex justify-between text-xs mb-1">
+                              <span className="font-mono text-foreground">{u.monthly}/{u.monthlyMax}</span>
+                              <span className="text-muted-foreground">{Math.round((u.monthly / u.monthlyMax) * 100)}%</span>
+                            </div>
+                            <Progress value={(u.monthly / u.monthlyMax) * 100} className="h-1" />
+                          </div>
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <span className={`tag ${
+                            u.status === "active" ? "bg-success/10 text-success" :
+                            u.status === "limit" ? "bg-destructive/10 text-destructive" :
+                            "bg-secondary text-muted-foreground"
+                          }`}>
+                            {u.status === "active" ? "Активен" : u.status === "limit" ? "Лимит" : "Неактивен"}
+                          </span>
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <div className="flex items-center gap-1 justify-end">
+                            <Button variant="ghost" size="icon" className="h-7 w-7">
+                              <Icon name="Settings" size={13} />
+                            </Button>
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10">
+                              <Icon name="Trash2" size={13} />
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="bg-card border border-border rounded-lg p-5">
+                <h3 className="text-sm font-semibold text-foreground mb-4">Настройка лимитов по тарифам</h3>
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-border">
+                      <th className="text-left py-2 pr-8 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Тариф</th>
+                      <th className="text-left py-2 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Дневной лимит</th>
+                      <th className="text-left py-2 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Месячный лимит</th>
+                      <th className="text-left py-2 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Качество</th>
+                      <th className="py-2" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {PLANS.map((plan) => (
+                      <tr key={plan.id} className="border-b border-border/40 last:border-0">
+                        <td className="py-3 pr-8">
+                          <span className={`tag ${plan.accent} ${plan.color}`}>{plan.name}</span>
+                        </td>
+                        <td className="py-3 px-4">
+                          <span className="font-mono text-sm text-foreground">{plan.daily}</span>
+                          <span className="text-xs text-muted-foreground ml-1">/ день</span>
+                        </td>
+                        <td className="py-3 px-4">
+                          <span className="font-mono text-sm text-foreground">{plan.monthly.toLocaleString("ru")}</span>
+                          <span className="text-xs text-muted-foreground ml-1">/ мес</span>
+                        </td>
+                        <td className="py-3 px-4">
+                          <span className="text-xs text-muted-foreground">{plan.id === "starter" ? "SD" : plan.id === "pro" ? "HD" : "4K"}</span>
+                        </td>
+                        <td className="py-3 text-right">
+                          <Button variant="ghost" size="sm" className="h-7 text-xs text-primary hover:text-primary hover:bg-primary/10">
+                            <Icon name="Pencil" size={12} className="mr-1" />
+                            Изменить
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+        </div>
+      </main>
     </div>
   );
-};
-
-export default Index;
+}
