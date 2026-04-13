@@ -91,6 +91,23 @@ export default function Index() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [generatedImage, setGeneratedImage] = useState<string | null>(null);
   const [generateError, setGenerateError] = useState<string | null>(null);
+  const [downloadingId, setDownloadingId] = useState<number | null>(null);
+
+  const handleDownload = useCallback(async (imageUrl: string, id: number, promptText: string) => {
+    setDownloadingId(id);
+    try {
+      const res = await fetch(imageUrl);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `generation-${id}-${promptText.slice(0, 30).replace(/[^a-zа-яё0-9]/gi, "_")}.png`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      setDownloadingId(null);
+    }
+  }, []);
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [historyLoading, setHistoryLoading] = useState(true);
 
@@ -457,16 +474,17 @@ export default function Index() {
                       <div className="w-1.5 h-1.5 rounded-full bg-success" />
                       <span className="text-xs font-medium text-foreground">Готово</span>
                     </div>
-                    <a
-                      href={generatedImage}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      download
-                      className="flex items-center gap-1.5 text-xs text-primary hover:text-primary/80 transition-colors"
+                    <button
+                      onClick={() => handleDownload(generatedImage, 0, prompt)}
+                      disabled={downloadingId === 0}
+                      className="flex items-center gap-1.5 text-xs text-primary hover:text-primary/80 transition-colors disabled:opacity-50"
                     >
-                      <Icon name="Download" size={13} />
+                      {downloadingId === 0
+                        ? <Icon name="Loader2" size={13} className="animate-spin" />
+                        : <Icon name="Download" size={13} />
+                      }
                       Скачать
-                    </a>
+                    </button>
                   </div>
                   <img
                     src={generatedImage}
@@ -502,16 +520,26 @@ export default function Index() {
                         <p className="text-xs text-muted-foreground">{h.style} • {h.time}</p>
                       </div>
                       {h.imageUrl && (
-                        <a
-                          href={h.imageUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="opacity-0 group-hover:opacity-100 transition-opacity"
-                        >
-                          <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0">
-                            <Icon name="ExternalLink" size={13} />
+                        <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
+                          <a href={h.imageUrl} target="_blank" rel="noopener noreferrer">
+                            <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" title="Открыть">
+                              <Icon name="ExternalLink" size={13} />
+                            </Button>
+                          </a>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 shrink-0"
+                            title="Скачать"
+                            disabled={downloadingId === h.id}
+                            onClick={() => handleDownload(h.imageUrl!, h.id, h.prompt)}
+                          >
+                            {downloadingId === h.id
+                              ? <Icon name="Loader2" size={13} className="animate-spin" />
+                              : <Icon name="Download" size={13} />
+                            }
                           </Button>
-                        </a>
+                        </div>
                       )}
                     </div>
                   ))}
