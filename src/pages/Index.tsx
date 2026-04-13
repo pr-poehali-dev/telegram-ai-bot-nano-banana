@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import Icon from "@/components/ui/icon";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -7,6 +7,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
+
+const GENERATE_URL = "https://functions.poehali.dev/967a2ae9-a5b6-49d8-b6d4-d055009b43e5";
 
 type Page = "home" | "generate" | "subscription" | "profile" | "admin";
 
@@ -69,6 +71,15 @@ const HISTORY = [
   { id: 4, prompt: "Аватар для корпоративного профиля сотрудника", style: "Портрет", time: "09:44", status: "error" },
 ];
 
+interface HistoryItem {
+  id: number;
+  prompt: string;
+  style: string;
+  time: string;
+  status: "done" | "error";
+  imageUrl?: string;
+}
+
 export default function Index() {
   const [page, setPage] = useState<Page>("home");
   const [prompt, setPrompt] = useState("");
@@ -76,17 +87,66 @@ export default function Index() {
   const [quality, setQuality] = useState("hd");
   const [isGenerating, setIsGenerating] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [generatedImage, setGeneratedImage] = useState<string | null>(null);
+  const [generateError, setGenerateError] = useState<string | null>(null);
+  const [history, setHistory] = useState<HistoryItem[]>(HISTORY);
 
-  const dailyUsed = 34;
+  const dailyUsed = history.filter(h => h.status === "done").length;
   const dailyMax = 50;
-  const monthlyUsed = 456;
+  const monthlyUsed = history.filter(h => h.status === "done").length + 422;
   const monthlyMax = 1000;
 
-  const handleGenerate = () => {
-    if (!prompt.trim()) return;
+  const handleGenerate = useCallback(async () => {
+    if (!prompt.trim() || isGenerating) return;
     setIsGenerating(true);
-    setTimeout(() => setIsGenerating(false), 3000);
-  };
+    setGeneratedImage(null);
+    setGenerateError(null);
+
+    try {
+      const res = await fetch(GENERATE_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt, style, quality }),
+      });
+      const data = await res.json();
+      const parsed = typeof data === "string" ? JSON.parse(data) : data;
+
+      if (!res.ok || parsed.error) {
+        throw new Error(parsed.error || "Ошибка генерации");
+      }
+
+      setGeneratedImage(parsed.url);
+
+      const styleLabels: Record<string, string> = {
+        minimal: "Минимализм", business: "Деловой", tech: "Техно",
+        portrait: "Портрет", abstract: "Абстракция",
+      };
+      const now = new Date();
+      const time = `${now.getHours().toString().padStart(2, "0")}:${now.getMinutes().toString().padStart(2, "0")}`;
+      setHistory(prev => [{
+        id: Date.now(),
+        prompt,
+        style: styleLabels[style] || style,
+        time,
+        status: "done",
+        imageUrl: parsed.url,
+      }, ...prev].slice(0, 20));
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Ошибка генерации";
+      setGenerateError(msg);
+      const now = new Date();
+      const time = `${now.getHours().toString().padStart(2, "0")}:${now.getMinutes().toString().padStart(2, "0")}`;
+      setHistory(prev => [{
+        id: Date.now(),
+        prompt,
+        style,
+        time,
+        status: "error",
+      }, ...prev].slice(0, 20));
+    } finally {
+      setIsGenerating(false);
+    }
+  }, [prompt, style, quality, isGenerating]);
 
   return (
     <div className="flex h-screen bg-background overflow-hidden font-ibm">
@@ -233,7 +293,7 @@ export default function Index() {
                 <div className="col-span-2 bg-card border border-border rounded-lg p-5">
                   <h3 className="text-sm font-semibold text-foreground mb-4">Последние генерации</h3>
                   <div className="space-y-2">
-                    {HISTORY.map((h) => (
+                    {history.map((h) => (
                       <div key={h.id} className="flex items-center gap-3 p-3 rounded-md bg-secondary/40 hover:bg-secondary/70 transition-colors">
                         <div className={`w-2 h-2 rounded-full shrink-0 ${h.status === "done" ? "bg-success" : "bg-destructive"}`} />
                         <div className="flex-1 min-w-0">
@@ -252,6 +312,7 @@ export default function Index() {
           {/* GENERATE */}
           {page === "generate" && (
             <div className="max-w-3xl space-y-5 animate-fade-in">
+              {/* Limits bar */}
               <div className="flex items-center gap-6 p-4 bg-card border border-border rounded-lg">
                 <div className="flex-1">
                   <div className="flex justify-between text-xs mb-1.5">
@@ -270,6 +331,7 @@ export default function Index() {
                 <Badge className="bg-primary/10 text-primary border-0 shrink-0">Про</Badge>
               </div>
 
+              {/* Form */}
               <div className="bg-card border border-border rounded-lg p-5 space-y-4">
                 <div>
                   <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2 block">Описание изображения</label>
@@ -278,6 +340,7 @@ export default function Index() {
                     onChange={(e) => setPrompt(e.target.value)}
                     placeholder="Опишите изображение, которое нужно создать..."
                     className="resize-none h-28 text-sm bg-secondary/50 border-border focus:border-primary/50 transition-colors"
+                    maxLength={500}
                   />
                   <p className="text-xs text-muted-foreground mt-1.5">{prompt.length} / 500 символов</p>
                 </div>
@@ -321,7 +384,7 @@ export default function Index() {
                   {isGenerating ? (
                     <span className="flex items-center gap-2">
                       <Icon name="Loader2" size={16} className="animate-spin" />
-                      Генерация...
+                      Генерация... это займёт ~15 секунд
                     </span>
                   ) : (
                     <span className="flex items-center gap-2">
@@ -332,21 +395,76 @@ export default function Index() {
                 </Button>
               </div>
 
+              {/* Error */}
+              {generateError && (
+                <div className="flex items-start gap-3 p-4 bg-destructive/10 border border-destructive/30 rounded-lg animate-fade-in">
+                  <Icon name="AlertCircle" size={16} className="text-destructive mt-0.5 shrink-0" />
+                  <div>
+                    <p className="text-sm font-medium text-destructive">Ошибка генерации</p>
+                    <p className="text-xs text-destructive/80 mt-0.5">{generateError}</p>
+                  </div>
+                  <button onClick={() => setGenerateError(null)} className="ml-auto text-destructive/60 hover:text-destructive">
+                    <Icon name="X" size={14} />
+                  </button>
+                </div>
+              )}
+
+              {/* Result image */}
+              {generatedImage && (
+                <div className="bg-card border border-border rounded-lg overflow-hidden animate-fade-in">
+                  <div className="flex items-center justify-between px-5 py-3 border-b border-border">
+                    <div className="flex items-center gap-2">
+                      <div className="w-1.5 h-1.5 rounded-full bg-success" />
+                      <span className="text-xs font-medium text-foreground">Готово</span>
+                    </div>
+                    <a
+                      href={generatedImage}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      download
+                      className="flex items-center gap-1.5 text-xs text-primary hover:text-primary/80 transition-colors"
+                    >
+                      <Icon name="Download" size={13} />
+                      Скачать
+                    </a>
+                  </div>
+                  <img
+                    src={generatedImage}
+                    alt="Сгенерированное изображение"
+                    className="w-full object-contain max-h-[512px]"
+                  />
+                </div>
+              )}
+
+              {/* History */}
               <div className="bg-card border border-border rounded-lg p-5">
                 <h3 className="text-sm font-semibold text-foreground mb-4">История генераций</h3>
                 <div className="space-y-2">
-                  {HISTORY.map((h) => (
-                    <div key={h.id} className="flex items-center gap-3 p-3 rounded-md border border-border/50 hover:border-border transition-colors">
-                      <div className={`w-8 h-8 rounded-md flex items-center justify-center shrink-0 ${h.status === "done" ? "bg-success/10" : "bg-destructive/10"}`}>
-                        <Icon name={h.status === "done" ? "CheckCircle" : "XCircle"} size={15} className={h.status === "done" ? "text-success" : "text-destructive"} />
-                      </div>
+                  {history.map((h) => (
+                    <div key={h.id} className="flex items-center gap-3 p-3 rounded-md border border-border/50 hover:border-border transition-colors group">
+                      {h.imageUrl ? (
+                        <img src={h.imageUrl} alt="" className="w-8 h-8 rounded-md object-cover shrink-0" />
+                      ) : (
+                        <div className={`w-8 h-8 rounded-md flex items-center justify-center shrink-0 ${h.status === "done" ? "bg-success/10" : "bg-destructive/10"}`}>
+                          <Icon name={h.status === "done" ? "CheckCircle" : "XCircle"} size={15} className={h.status === "done" ? "text-success" : "text-destructive"} />
+                        </div>
+                      )}
                       <div className="flex-1 min-w-0">
                         <p className="text-xs text-foreground truncate">{h.prompt}</p>
                         <p className="text-xs text-muted-foreground">{h.style} • {h.time}</p>
                       </div>
-                      <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0">
-                        <Icon name="Download" size={13} />
-                      </Button>
+                      {h.imageUrl && (
+                        <a
+                          href={h.imageUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0">
+                            <Icon name="ExternalLink" size={13} />
+                          </Button>
+                        </a>
+                      )}
                     </div>
                   ))}
                 </div>
