@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import Icon from "@/components/ui/icon";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -9,6 +9,8 @@ import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 
 const GENERATE_URL = "https://functions.poehali.dev/967a2ae9-a5b6-49d8-b6d4-d055009b43e5";
+const SAVE_IMAGE_URL = "https://functions.poehali.dev/41b47fcc-99ec-4ba7-820b-0a9c2db87cb1";
+const GET_HISTORY_URL = "https://functions.poehali.dev/71c50a95-7be7-4e94-aa81-826f3b7959b4";
 
 type Page = "home" | "generate" | "subscription" | "profile" | "admin";
 
@@ -89,11 +91,40 @@ export default function Index() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [generatedImage, setGeneratedImage] = useState<string | null>(null);
   const [generateError, setGenerateError] = useState<string | null>(null);
-  const [history, setHistory] = useState<HistoryItem[]>(HISTORY);
+  const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(true);
+
+  const styleLabels: Record<string, string> = {
+    minimal: "Минимализм", business: "Деловой", tech: "Техно",
+    portrait: "Портрет", abstract: "Абстракция",
+  };
+
+  // Загружаем историю из БД при старте
+  useEffect(() => {
+    fetch(GET_HISTORY_URL)
+      .then(r => r.json())
+      .then(data => {
+        const parsed = typeof data === "string" ? JSON.parse(data) : data;
+        const items: HistoryItem[] = (parsed.items || []).map((item: {
+          id: number; prompt: string; style: string; created_at: string;
+          image_url?: string; status: string;
+        }) => ({
+          id: item.id,
+          prompt: item.prompt,
+          style: styleLabels[item.style] || item.style,
+          time: new Date(item.created_at).toLocaleTimeString("ru", { hour: "2-digit", minute: "2-digit" }),
+          status: item.status as "done" | "error",
+          imageUrl: item.image_url || undefined,
+        }));
+        setHistory(items);
+      })
+      .catch(() => setHistory(HISTORY))
+      .finally(() => setHistoryLoading(false));
+  }, []);
 
   const dailyUsed = history.filter(h => h.status === "done").length;
   const dailyMax = 50;
-  const monthlyUsed = history.filter(h => h.status === "done").length + 422;
+  const monthlyUsed = history.filter(h => h.status === "done").length;
   const monthlyMax = 1000;
 
   const handleGenerate = useCallback(async () => {
@@ -103,6 +134,7 @@ export default function Index() {
     setGenerateError(null);
 
     try {
+      // 1. Генерируем через DALL-E
       const res = await fetch(GENERATE_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -117,32 +149,40 @@ export default function Index() {
 
       setGeneratedImage(parsed.url);
 
-      const styleLabels: Record<string, string> = {
-        minimal: "Минимализм", business: "Деловой", tech: "Техно",
-        portrait: "Портрет", abstract: "Абстракция",
-      };
+      // 2. Сохраняем в S3 + БД
+      const saveRes = await fetch(SAVE_IMAGE_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ image_url: parsed.url, prompt, style, quality, status: "done" }),
+      });
+      const saveData = await saveRes.json();
+      const saved = typeof saveData === "string" ? JSON.parse(saveData) : saveData;
+
+      const cdnUrl = saved.cdn_url || parsed.url;
+      setGeneratedImage(cdnUrl);
+
       const now = new Date();
-      const time = `${now.getHours().toString().padStart(2, "0")}:${now.getMinutes().toString().padStart(2, "0")}`;
+      const time = now.toLocaleTimeString("ru", { hour: "2-digit", minute: "2-digit" });
+      setHistory(prev => [{
+        id: saved.id || Date.now(),
+        prompt,
+        style: styleLabels[style] || style,
+        time,
+        status: "done",
+        imageUrl: cdnUrl,
+      }, ...prev].slice(0, 50));
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Ошибка генерации";
+      setGenerateError(msg);
+      const now = new Date();
+      const time = now.toLocaleTimeString("ru", { hour: "2-digit", minute: "2-digit" });
       setHistory(prev => [{
         id: Date.now(),
         prompt,
         style: styleLabels[style] || style,
         time,
-        status: "done",
-        imageUrl: parsed.url,
-      }, ...prev].slice(0, 20));
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "Ошибка генерации";
-      setGenerateError(msg);
-      const now = new Date();
-      const time = `${now.getHours().toString().padStart(2, "0")}:${now.getMinutes().toString().padStart(2, "0")}`;
-      setHistory(prev => [{
-        id: Date.now(),
-        prompt,
-        style,
-        time,
         status: "error",
-      }, ...prev].slice(0, 20));
+      }, ...prev].slice(0, 50));
     } finally {
       setIsGenerating(false);
     }
@@ -439,6 +479,14 @@ export default function Index() {
               {/* History */}
               <div className="bg-card border border-border rounded-lg p-5">
                 <h3 className="text-sm font-semibold text-foreground mb-4">История генераций</h3>
+                {historyLoading ? (
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground py-4 justify-center">
+                    <Icon name="Loader2" size={14} className="animate-spin" />
+                    Загрузка истории...
+                  </div>
+                ) : history.length === 0 ? (
+                  <p className="text-xs text-muted-foreground text-center py-4">Генераций пока нет</p>
+                ) : (
                 <div className="space-y-2">
                   {history.map((h) => (
                     <div key={h.id} className="flex items-center gap-3 p-3 rounded-md border border-border/50 hover:border-border transition-colors group">
@@ -468,6 +516,7 @@ export default function Index() {
                     </div>
                   ))}
                 </div>
+                )}
               </div>
             </div>
           )}
