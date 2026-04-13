@@ -6,10 +6,21 @@ import boto3
 import psycopg2
 
 
+def get_user_id_from_session(cur, schema: str, session_id: str):
+    if not session_id:
+        return None
+    cur.execute(
+        f"SELECT user_id FROM {schema}.sessions WHERE id = %s AND expires_at > NOW()",
+        (session_id,)
+    )
+    row = cur.fetchone()
+    return row[0] if row else None
+
+
 def handler(event: dict, context) -> dict:
     """
-    Скачивает изображение по URL, сохраняет в S3 и записывает в БД.
-    Принимает: image_url, prompt, style, quality, status.
+    Скачивает изображение по URL, сохраняет в S3 и записывает в БД с привязкой к пользователю.
+    Принимает: image_url, prompt, style, quality, status. Заголовок X-Session-Id — опционально.
     Возвращает: id, cdn_url, created_at.
     """
     if event.get('httpMethod') == 'OPTIONS':
@@ -18,11 +29,14 @@ def handler(event: dict, context) -> dict:
             'headers': {
                 'Access-Control-Allow-Origin': '*',
                 'Access-Control-Allow-Methods': 'POST, OPTIONS',
-                'Access-Control-Allow-Headers': 'Content-Type',
+                'Access-Control-Allow-Headers': 'Content-Type, X-Session-Id',
                 'Access-Control-Max-Age': '86400',
             },
             'body': ''
         }
+
+    headers = event.get('headers') or {}
+    session_id = headers.get('X-Session-Id') or headers.get('x-session-id', '')
 
     body = json.loads(event.get('body') or '{}')
     image_url = body.get('image_url', '').strip()
@@ -63,10 +77,13 @@ def handler(event: dict, context) -> dict:
     schema = os.environ.get('MAIN_DB_SCHEMA', 'public')
     conn = psycopg2.connect(os.environ['DATABASE_URL'])
     cur = conn.cursor()
+
+    user_id = get_user_id_from_session(cur, schema, session_id)
+
     cur.execute(
-        f"INSERT INTO {schema}.generations (prompt, style, quality, image_url, s3_key, status) "
-        f"VALUES (%s, %s, %s, %s, %s, %s) RETURNING id, created_at",
-        (prompt, style, quality, cdn_url, s3_key, status)
+        f"INSERT INTO {schema}.generations (prompt, style, quality, image_url, s3_key, status, user_id) "
+        f"VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id, created_at",
+        (prompt, style, quality, cdn_url, s3_key, status, user_id)
     )
     row = cur.fetchone()
     conn.commit()

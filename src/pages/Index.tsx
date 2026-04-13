@@ -11,6 +11,121 @@ import { Switch } from "@/components/ui/switch";
 const GENERATE_URL = "https://functions.poehali.dev/967a2ae9-a5b6-49d8-b6d4-d055009b43e5";
 const SAVE_IMAGE_URL = "https://functions.poehali.dev/41b47fcc-99ec-4ba7-820b-0a9c2db87cb1";
 const GET_HISTORY_URL = "https://functions.poehali.dev/71c50a95-7be7-4e94-aa81-826f3b7959b4";
+const AUTH_URL = "https://functions.poehali.dev/fe2300e9-d101-47de-902d-23cca4139ca1";
+
+async function authCall(action: string, payload: object = {}, sessionId?: string) {
+  const res = await fetch(AUTH_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(sessionId ? { "X-Session-Id": sessionId } : {}),
+    },
+    body: JSON.stringify({ action, ...payload }),
+  });
+  const data = await res.json();
+  return { ok: res.ok, data: typeof data === "string" ? JSON.parse(data) : data };
+}
+
+interface User { id: number; email: string; name: string; plan: string; }
+
+function AuthScreen({ onAuth }: { onAuth: (user: User, sid: string) => void }) {
+  const [mode, setMode] = useState<"login" | "register">("login");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [name, setName] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError("");
+    const payload = mode === "register" ? { email, password, name } : { email, password };
+    const { ok, data } = await authCall(mode, payload);
+    setLoading(false);
+    if (!ok) { setError(data.error || "Ошибка"); return; }
+    localStorage.setItem("session_id", data.session_id);
+    onAuth(data.user, data.session_id);
+  };
+
+  return (
+    <div className="min-h-screen bg-background flex items-center justify-center p-4">
+      <div className="w-full max-w-sm">
+        <div className="flex items-center gap-3 mb-8 justify-center">
+          <div className="w-8 h-8 rounded bg-primary flex items-center justify-center">
+            <Icon name="Zap" size={16} className="text-primary-foreground" />
+          </div>
+          <span className="font-semibold text-lg text-foreground">ImageGen Pro</span>
+        </div>
+
+        <div className="bg-card border border-border rounded-lg p-6 space-y-5">
+          <div>
+            <h2 className="text-base font-semibold text-foreground">
+              {mode === "login" ? "Вход в аккаунт" : "Регистрация"}
+            </h2>
+            <p className="text-xs text-muted-foreground mt-1">
+              {mode === "login" ? "Введите email и пароль" : "Создайте новый аккаунт"}
+            </p>
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-3">
+            {mode === "register" && (
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Имя</label>
+                <input
+                  type="text"
+                  value={name}
+                  onChange={e => setName(e.target.value)}
+                  placeholder="Ваше имя"
+                  className="w-full h-9 px-3 text-sm bg-secondary/50 border border-border rounded-md focus:outline-none focus:border-primary/50 text-foreground"
+                />
+              </div>
+            )}
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Email</label>
+              <input
+                type="email"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                placeholder="you@example.com"
+                required
+                className="w-full h-9 px-3 text-sm bg-secondary/50 border border-border rounded-md focus:outline-none focus:border-primary/50 text-foreground"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Пароль</label>
+              <input
+                type="password"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                placeholder="Минимум 6 символов"
+                required
+                className="w-full h-9 px-3 text-sm bg-secondary/50 border border-border rounded-md focus:outline-none focus:border-primary/50 text-foreground"
+              />
+            </div>
+
+            {error && (
+              <p className="text-xs text-destructive bg-destructive/10 px-3 py-2 rounded-md">{error}</p>
+            )}
+
+            <Button type="submit" disabled={loading} className="w-full h-9 bg-primary text-primary-foreground text-sm font-semibold">
+              {loading ? <Icon name="Loader2" size={15} className="animate-spin" /> : mode === "login" ? "Войти" : "Зарегистрироваться"}
+            </Button>
+          </form>
+
+          <div className="text-center">
+            <button
+              onClick={() => { setMode(m => m === "login" ? "register" : "login"); setError(""); }}
+              className="text-xs text-primary hover:text-primary/80 transition-colors"
+            >
+              {mode === "login" ? "Нет аккаунта? Зарегистрироваться" : "Уже есть аккаунт? Войти"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 type Page = "home" | "generate" | "subscription" | "profile" | "admin";
 
@@ -83,6 +198,27 @@ interface HistoryItem {
 }
 
 export default function Index() {
+  const [user, setUser] = useState<User | null>(null);
+  const [sessionId, setSessionId] = useState<string>("");
+  const [authLoading, setAuthLoading] = useState(true);
+
+  // Восстанавливаем сессию при старте
+  useEffect(() => {
+    const sid = localStorage.getItem("session_id") || "";
+    if (!sid) { setAuthLoading(false); return; }
+    authCall("me", {}, sid).then(({ ok, data }) => {
+      if (ok) { setUser(data); setSessionId(sid); }
+      else localStorage.removeItem("session_id");
+    }).finally(() => setAuthLoading(false));
+  }, []);
+
+  const handleAuth = (u: User, sid: string) => { setUser(u); setSessionId(sid); };
+  const handleLogout = async () => {
+    await authCall("logout", {}, sessionId);
+    localStorage.removeItem("session_id");
+    setUser(null); setSessionId("");
+  };
+
   const [page, setPage] = useState<Page>("home");
   const [prompt, setPrompt] = useState("");
   const [style, setStyle] = useState("minimal");
@@ -92,6 +228,8 @@ export default function Index() {
   const [generatedImage, setGeneratedImage] = useState<string | null>(null);
   const [generateError, setGenerateError] = useState<string | null>(null);
   const [downloadingId, setDownloadingId] = useState<number | null>(null);
+
+
 
   const handleDownload = useCallback(async (imageUrl: string, id: number, promptText: string) => {
     setDownloadingId(id);
@@ -118,7 +256,7 @@ export default function Index() {
 
   // Загружаем историю из БД при старте
   useEffect(() => {
-    fetch(GET_HISTORY_URL)
+    fetch(GET_HISTORY_URL, { headers: sessionId ? { "X-Session-Id": sessionId } : {} })
       .then(r => r.json())
       .then(data => {
         const parsed = typeof data === "string" ? JSON.parse(data) : data;
@@ -169,7 +307,10 @@ export default function Index() {
       // 2. Сохраняем в S3 + БД
       const saveRes = await fetch(SAVE_IMAGE_URL, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(sessionId ? { "X-Session-Id": sessionId } : {}),
+        },
         body: JSON.stringify({ image_url: parsed.url, prompt, style, quality, status: "done" }),
       });
       const saveData = await saveRes.json();
@@ -205,6 +346,13 @@ export default function Index() {
     }
   }, [prompt, style, quality, isGenerating]);
 
+  if (authLoading) return (
+    <div className="min-h-screen bg-background flex items-center justify-center">
+      <Icon name="Loader2" size={24} className="animate-spin text-primary" />
+    </div>
+  );
+  if (!user) return <AuthScreen onAuth={handleAuth} />;
+
   return (
     <div className="flex h-screen bg-background overflow-hidden font-ibm">
       {/* Sidebar */}
@@ -236,20 +384,26 @@ export default function Index() {
         {/* User */}
         <div className="p-2 border-t border-border shrink-0">
           {sidebarOpen ? (
-            <div className="flex items-center gap-3 px-3 py-2.5 rounded-md bg-secondary/50">
+            <div className="flex items-center gap-2 px-3 py-2.5 rounded-md bg-secondary/50">
               <div className="w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center shrink-0">
-                <span className="text-xs font-semibold text-primary">ИА</span>
+                <span className="text-xs font-semibold text-primary">{user.name.slice(0, 2).toUpperCase()}</span>
               </div>
-              <div className="min-w-0">
-                <p className="text-xs font-medium text-foreground truncate">Иванов А.П.</p>
-                <p className="text-xs text-muted-foreground truncate">Тариф: Про</p>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-medium text-foreground truncate">{user.name}</p>
+                <p className="text-xs text-muted-foreground truncate">{user.email}</p>
               </div>
+              <button onClick={handleLogout} title="Выйти" className="shrink-0 text-muted-foreground hover:text-destructive transition-colors">
+                <Icon name="LogOut" size={14} />
+              </button>
             </div>
           ) : (
-            <div className="flex justify-center py-2">
+            <div className="flex flex-col items-center gap-2 py-2">
               <div className="w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center">
-                <span className="text-xs font-semibold text-primary">ИА</span>
+                <span className="text-xs font-semibold text-primary">{user.name.slice(0, 2).toUpperCase()}</span>
               </div>
+              <button onClick={handleLogout} title="Выйти" className="text-muted-foreground hover:text-destructive transition-colors">
+                <Icon name="LogOut" size={13} />
+              </button>
             </div>
           )}
         </div>

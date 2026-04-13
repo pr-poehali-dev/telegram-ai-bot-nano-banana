@@ -1,0 +1,31 @@
+{
+  "tests": [
+    {
+      "name": "OPTIONS preflight",
+      "method": "OPTIONS",
+      "path": "/",
+      "expectedStatus": 200
+    },
+    {
+      "name": "me without session returns 401",
+      "method": "POST",
+      "path": "/",
+      "body": {"action": "me"},
+      "expectedStatus": 401
+    },
+    {
+      "name": "register missing fields returns 400",
+      "method": "POST",
+      "path": "/",
+      "body": {"action": "register"},
+      "expectedStatus": 400
+    },
+    {
+      "name": "login wrong credentials returns 401",
+      "method": "POST",
+      "path": "/",
+      "body": {"action": "login", "email": "no@no.no", "password": "wrongpass"},
+      "expectedStatus": 401
+    }
+  ]
+}
