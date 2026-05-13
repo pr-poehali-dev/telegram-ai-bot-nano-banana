@@ -12,6 +12,13 @@
       "path": "/",
       "body": {"prompt": ""},
       "expectedStatus": 400
+    },
+    {
+      "name": "Generate test image",
+      "method": "POST",
+      "path": "/",
+      "body": {"prompt": "simple red circle on white background", "style": "minimal", "quality": "standard"},
+      "expectedStatus": 200
     }
   ]
 }
